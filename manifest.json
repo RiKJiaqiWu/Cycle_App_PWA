@@ -1,0 +1,18 @@
+{
+  "name": "工作日历日志",
+  "short_name": "工作日历",
+  "description": "三级周期工作日历 + 每日日志，支持在线节假日数据",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3366ff",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

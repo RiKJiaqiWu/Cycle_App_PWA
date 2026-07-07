@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!--
+  test-color-service.html
+  Unit tests for js/color-service.js
+  Open in a browser (served via any local HTTP server) to run.
+  All tests print to the page; green = pass, red = fail.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>color-service tests</title>
+  <style>
+    body { font-family: monospace; padding: 16px; }
+    .pass { color: #2a7a2a; }
+    .fail { color: #c00; font-weight: bold; }
+    h2 { margin-top: 24px; }
+  </style>
+</head>
+<body>
+<h1>color-service.js unit tests</h1>
+<div id="output"></div>
+
+<script type="module">
+import { colorIndex, cycleLabel, colorFor, COLORS, GRAY, readableForeground }
+  from './js/color-service.js';
+
+const out = document.getElementById('output');
+let passed = 0, failed = 0;
+
+function assert(desc, got, expected) {
+  const ok = JSON.stringify(got) === JSON.stringify(expected);
+  const line = document.createElement('div');
+  line.className = ok ? 'pass' : 'fail';
+  line.textContent = (ok ? '✓ PASS' : '✗ FAIL') +
+    `  ${desc}  |  expected: ${JSON.stringify(expected)}  got: ${JSON.stringify(got)}`;
+  out.appendChild(line);
+  ok ? passed++ : failed++;
+}
+
+// Helpers
+function d(y, m, day) { return new Date(y, m - 1, day); }
+
+// ── colorIndex & cycleLabel ──────────────────────────────────────────────────
+// Anchor 2026-06-29 → n=0 → pos=0 → idx=0 (blue), label=1-1-1
+assert('anchor colorIndex',  colorIndex(d(2026, 6, 29)), 0);
+assert('anchor cycleLabel',  cycleLabel(d(2026, 6, 29)), '1-1-1');
+
+// 2026-07-07 (Tue) → n=6 → pos=6 → idx=0, label=1-2-3
+assert('2026-07-07 colorIndex',  colorIndex(d(2026, 7, 7)), 0);
+assert('2026-07-07 cycleLabel',  cycleLabel(d(2026, 7, 7)), '1-2-3');
+
+// 2026-07-04 (Sat) → n=5 → pos=5 → idx=0, label=1-2-2
+assert('2026-07-04 Sat colorIndex',  colorIndex(d(2026, 7, 4)), 0);
+assert('2026-07-04 Sat cycleLabel',  cycleLabel(d(2026, 7, 4)), '1-2-2');
+
+// n=12 → pos=12 → idx=1 (yellow), label=2-1-1
+// Anchor+12 weekdays: 29Jun(Mon)+12 weekdays = 14 Jul (Tue) [29,30,1,2,3,6,7,8,9,10,13,14]
+assert('n=12 colorIndex',  colorIndex(d(2026, 7, 14)), 1);
+assert('n=12 cycleLabel',  cycleLabel(d(2026, 7, 14)), '2-1-1');
+
+// n=24 → pos=24 → idx=2 (green), label=3-1-1
+// Anchor+24 weekdays: count 24 from 2026-06-29
+// 3 weeks = 21 weekdays = +21 days to Jul 28 (Mon). Then 3 more: 29(Tue),30(Wed),31(Thu)
+// = 2026-07-31 (Thu) is n=24? Let's verify:
+// Weeks: 3 full = 21 WD → +3 weeks = 2026-07-20 (Mon). Then +3 WD: Jul 21(Tue),22(Wed),23(Thu) → 23 Jul = n=24?
+// Actually: anchor = Jun 29(Mon). +3 full weeks = Jul 20. Remaining 3 days: 20,21,22 Jul? No, we start from anchor.
+// Let me just trust the label result here.
+// n=24: idx=2, label=3-1-1
+// We need to find a date 24 weekdays from anchor.
+// countWeekdays(anchor, d): 24 = 4*5 + 4 remainder days. 4 weeks = 28 days → anchor+28 = Jul 27 (Mon).
+// remainder 4 from Mon: Mon,Tue,Wed,Thu → +4 days → Jul 31 (Fri) is the 4th weekday → n=24 is Jul 31 2026
+assert('n=24 colorIndex', colorIndex(d(2026, 7, 31)), 2);
+assert('n=24 cycleLabel', cycleLabel(d(2026, 7, 31)), '3-1-1');
+
+// Date BEFORE anchor: 2026-06-26 (Fri) → n=-1 → floorMod(-1,36)=35 → idx=2, label=3-3-4
+assert('before anchor colorIndex', colorIndex(d(2026, 6, 26)), 2);
+assert('before anchor cycleLabel', cycleLabel(d(2026, 6, 26)), '3-3-4');
+
+// ── colorFor ────────────────────────────────────────────────────────────────
+assert('colorFor workday returns COLORS[0]', colorFor(d(2026, 6, 29), true),  COLORS[0]);
+assert('colorFor non-workday returns GRAY',  colorFor(d(2026, 6, 29), false), GRAY);
+
+// ── readableForeground ───────────────────────────────────────────────────────
+// Blue #3366ff: R=51,G=102,B=255 → lum=0.299*51+0.587*102+0.114*255 = 15.249+59.874+29.07=104.19 → white
+assert('blue bg → white text', readableForeground('#3366ff'), '#ffffff');
+// Yellow #f5b800: R=245,G=184,B=0 → lum=0.299*245+0.587*184+0.114*0=73.255+107.908+0=181.16 → black
+assert('yellow bg → black text', readableForeground('#f5b800'), '#000000');
+// Gray #7a7a7a: R=G=B=122 → lum=122 → white (122 < 150)
+assert('gray bg → white text', readableForeground('#7a7a7a'), '#ffffff');
+
+// ── Summary ─────────────────────────────────────────────────────────────────
+const summary = document.createElement('h2');
+summary.textContent = `${passed} passed, ${failed} failed`;
+summary.style.color = failed === 0 ? '#2a7a2a' : '#c00';
+out.appendChild(summary);
+</script>
+</body>
+</html>
