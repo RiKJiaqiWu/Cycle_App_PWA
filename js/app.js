@@ -36,6 +36,7 @@ const logSaveBtn   = document.getElementById('log-save');
 const logCloseBtn  = document.getElementById('log-close');
 const legendEl     = document.getElementById('legend');
 const statusBar    = document.getElementById('status-bar');
+const updateBanner = document.getElementById('update-banner');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -290,5 +291,35 @@ async function render() {
   await renderCalendar();
 }
 
+// ─── Version check ───────────────────────────────────────────────────────────
+const VERSION_KEY = 'workcal_app_version';
+
+async function checkVersion() {
+  try {
+    const resp = await fetch('./version.json?_=' + Date.now(), { cache: 'no-store' });
+    if (!resp.ok) return;
+    const { v } = await resp.json();
+    const stored = localStorage.getItem(VERSION_KEY);
+    // First visit: just store version, don't show banner
+    if (stored !== null && stored !== v) {
+      updateBanner.classList.remove('hidden');
+    }
+    localStorage.setItem(VERSION_KEY, v);
+  } catch (_) {
+    // Offline or fetch failed — silently ignore
+  }
+}
+
+async function applyUpdate() {
+  if ('caches' in window) {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => caches.delete(k)));
+  }
+  location.reload();
+}
+
+updateBanner.addEventListener('click', applyUpdate);
+
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 render();
+checkVersion();

@@ -4,7 +4,7 @@
  * API requests (holiday data from external hosts) always go to the network.
  */
 
-const CACHE = 'workcal-v1';
+const CACHE = 'workcal-v2';
 const ASSETS = [
   './',
   './index.html',
