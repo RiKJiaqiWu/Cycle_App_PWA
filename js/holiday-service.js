@@ -172,7 +172,6 @@ export class HolidayService {
       return dow !== 0 && dow !== 6;
     }
 
-    if (data.makeupDays.has(dateStr)) return true;
     if (data.offDays.has(dateStr))    return false;
     const dow = date.getDay();
     return dow !== 0 && dow !== 6;
