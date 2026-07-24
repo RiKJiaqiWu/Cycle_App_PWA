@@ -3,7 +3,7 @@
  * Coordinates color-service, holiday-service, log-repo; renders DOM; handles interactions.
  */
 
-import { colorFor, cycleLabel, COLORS, GRAY, readableForeground } from './color-service.js';
+import { colorFor, cycleLabel, canDeriveCycle, COLORS, GRAY, NEUTRAL, readableForeground } from './color-service.js';
 import { HolidayService } from './holiday-service.js';
 import { LogRepo } from './log-repo.js';
 
@@ -14,6 +14,17 @@ if ('serviceWorker' in navigator) {
 
 // ─── Singleton service ───────────────────────────────────────────────────────
 const svc = new HolidayService();
+
+// Cycle context: bridges the color-service to holiday data and memoizes per-year
+// offsets / full-year colored-workday totals (cleared when data is force-reloaded).
+const cycleCtx = {
+  _yearOffset:      new Map(),
+  _fullYearColored: new Map(),
+  isWorkday: (dateStr) => svc.isWorkday(dateStr),
+  isLoaded:  (year)    => svc.isLoaded(year),
+};
+
+const ANCHOR_YEAR = 2026;
 
 // ─── Application state ───────────────────────────────────────────────────────
 const today     = new Date();
@@ -37,6 +48,7 @@ const logCloseBtn  = document.getElementById('log-close');
 const legendEl     = document.getElementById('legend');
 const statusBar    = document.getElementById('status-bar');
 const updateBanner = document.getElementById('update-banner');
+const deriveBanner = document.getElementById('derive-banner');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -93,20 +105,18 @@ const DAY_NAMES = ['一', '二', '三', '四', '五', '六', '日'];
 async function renderCalendar() {
   calendarGrid.innerHTML = '';
 
-  // Kick off holiday data load (non-blocking) then re-render when done
-  const prevYear = state.year - 1;
-  const nextYear = state.year + 1;
+  // Load every year required to derive this year's cycle (anchor → visible year),
+  // then preload adjacent years (fire-and-forget) for snappy navigation.
+  const lo = Math.min(state.year, ANCHOR_YEAR);
+  const hi = Math.max(state.year, ANCHOR_YEAR);
+  await svc.ensureYears(lo, hi);
+  svc.ensureYear(state.year - 1);
+  svc.ensureYear(state.year + 1);
 
-  const didHaveData = svc.isLoaded(state.year);
-  await svc.ensureYear(state.year);
-  // Also preload adjacent years (fire-and-forget)
-  svc.ensureYear(prevYear);
-  svc.ensureYear(nextYear);
-
-  // If data just arrived asynchronously, re-render
-  if (!didHaveData && svc.isLoaded(state.year)) {
-    // We already awaited above, so data is now loaded — just continue rendering
-  }
+  // Undivable: some required year could not be loaded (offline/degraded). Render neutral
+  // cells without cycle labels and offer a manual retry; never approximate the cycle.
+  const derivable = canDeriveCycle(state.year, cycleCtx);
+  deriveBanner.classList.toggle('hidden', derivable);
 
   // ── Column headers ──────────────────────────────────────────────────────
   for (let i = 0; i < 7; i++) {
@@ -135,7 +145,7 @@ async function renderCalendar() {
     const date    = new Date(state.year, state.month, day);
     const dateStr = toDateStr(date);
     const isWD    = svc.isWorkday(dateStr);
-    const bg      = colorFor(date, isWD);
+    const bg      = derivable ? colorFor(date, isWD, cycleCtx) : NEUTRAL;
     const fg      = readableForeground(bg);
 
     const cell = document.createElement('div');
@@ -157,11 +167,11 @@ async function renderCalendar() {
     dateLabel.textContent = toShortLabel(date);
     cell.appendChild(dateLabel);
 
-    // Cycle label (workdays only)
-    if (isWD) {
+    // Cycle label (only on derivable months, workdays only)
+    if (derivable && isWD) {
       const cycleEl = document.createElement('span');
       cycleEl.className   = 'cell-cycle';
-      cycleEl.textContent = cycleLabel(date);
+      cycleEl.textContent = cycleLabel(date, cycleCtx);
       cell.appendChild(cycleEl);
     }
 
@@ -319,6 +329,24 @@ async function applyUpdate() {
 }
 
 updateBanner.addEventListener('click', applyUpdate);
+
+// ─── Derive banner (chain-download missing holiday years) ────────────────────
+async function retryDerive() {
+  const lo = Math.min(state.year, ANCHOR_YEAR);
+  const hi = Math.max(state.year, ANCHOR_YEAR);
+  // Force a fresh fetch of every still-missing year, then rebuild.
+  cycleCtx._yearOffset.clear();
+  cycleCtx._fullYearColored.clear();
+  for (let y = lo; y <= hi; y++) {
+    if (!svc.isLoaded(y)) svc.forget(y);
+  }
+  deriveBanner.classList.add('hidden');
+  statusBar.textContent = `正在联网推演 ${lo}–${hi} 节假日数据…`;
+  statusBar.style.color = '#888';
+  await render();
+}
+
+deriveBanner.addEventListener('click', retryDerive);
 
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 render();

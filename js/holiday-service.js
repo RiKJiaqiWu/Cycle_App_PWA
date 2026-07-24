@@ -159,7 +159,13 @@ export class HolidayService {
   /**
    * Synchronous workday test.
    * dateStr format: "2026-07-07"
-   * Falls back to weekend-only rule if data is not yet loaded.
+   *
+   * Working-day rule (current app spec, mirrors Java HolidayYear.isWorkday): a date is a
+   * workday only when it is NOT a statutory day off AND NOT a Saturday/Sunday. A make-up
+   * working day (makeupDays) is therefore treated as a NON-workday too — a Sat/Sun stays
+   * gray even when flagged as a make-up day. makeupDays is parsed/stored for fidelity but
+   * is intentionally NOT consumed here. Falls back to the weekend-only rule if data is not
+   * yet loaded.
    */
   isWorkday(dateStr) {
     const [y, m, d] = dateStr.split('-').map(Number);
@@ -175,6 +181,34 @@ export class HolidayService {
     if (data.offDays.has(dateStr))    return false;
     const dow = date.getDay();
     return dow !== 0 && dow !== 6;
+  }
+
+  /**
+   * Ensure every year in [fromYear, toYear] (order-insensitive) is loaded.
+   * Returns true only when *all* years ended up with real (non-degraded) data.
+   */
+  async ensureYears(fromYear, toYear) {
+    const lo = Math.min(fromYear, toYear);
+    const hi = Math.max(fromYear, toYear);
+    for (let y = lo; y <= hi; y++) {
+      await this.ensureYear(y);
+    }
+    for (let y = lo; y <= hi; y++) {
+      if (!this.isLoaded(y)) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Drop all cached state for a year (memory, degraded flag, localStorage) so the next
+   * ensureYear() performs a fresh network fetch. Used by the "需联网推演" retry.
+   */
+  forget(year) {
+    this._memory.delete(year);
+    this._degraded.delete(year);
+    try {
+      localStorage.removeItem(lsKey(year));
+    } catch (_) { /* ignore */ }
   }
 
   /**
